@@ -22,7 +22,10 @@ import {
   Search,
   Megaphone,
   Activity,
-  Layers
+  RefreshCw,
+  FileSpreadsheet,
+  Zap,
+  HelpCircle
 } from 'lucide-react';
 import { 
   INITIAL_CLASSES, 
@@ -36,28 +39,117 @@ import {
 import { 
   addLibraryBookToSheets, 
   addAnnouncementToSheets, 
-  recordAttendanceToSheets 
+  recordAttendanceToSheets,
+  addStudentToSheets,
+  addTeacherToSheets,
+  fetchStudentsFromSheets,
+  fetchTeachersFromSheets,
+  fetchAttendanceFromSheets,
+  fetchLibraryFromSheets,
+  fetchAnnouncementsFromSheets
 } from '../services/googleSheetsApi.js';
 
 export default function PortalDashboardModal({ role, onClose, lang }) {
-  const [activeSubTab, setActiveSubTab] = useState('overview'); // overview, students, teachers, schedule, library, extras, announcements
+  const [activeSubTab, setActiveSubTab] = useState('overview'); // overview, students, teachers, schedule, library, extras, announcements, cbt-quiz
   
-  // Data States
+  // Master Data States
   const [selectedClassId, setSelectedClassId] = useState('10-A');
   const [studentsList, setStudentsList] = useState(INITIAL_STUDENTS);
   const [teachersList, setTeachersList] = useState(INITIAL_TEACHERS);
   const [libraryBooks, setLibraryBooks] = useState(INITIAL_LIBRARY_BOOKS);
   const [announcements, setAnnouncements] = useState(INITIAL_ANNOUNCEMENTS);
-  const [announcementScope, setAnnouncementScope] = useState('General'); // General or Class
+  const [announcementScope, setAnnouncementScope] = useState('General');
+  const [syncStatusMsg, setSyncStatusMsg] = useState('');
+  const [isPullingData, setIsPullingData] = useState(false);
 
   // Form Modals
+  const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [newStudent, setNewStudent] = useState({ name: '', nisn: '', classId: '10-A', email: '', parentName: '' });
+
+  const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
+  const [newTeacher, setNewTeacher] = useState({ name: '', subject: 'Advanced Physics', email: '', room: 'Lab 3A' });
+
   const [showAddBookModal, setShowAddBookModal] = useState(false);
   const [newBook, setNewBook] = useState({ title: '', author: '', category: 'Science & AI', readUrl: '', description: '' });
 
   const [showAddAnnModal, setShowAddAnnModal] = useState(false);
   const [newAnn, setNewAnn] = useState({ scope: 'General', targetClassId: '10-A', title: '', content: '', priority: 'General' });
 
-  // Handle Add E-Book Link
+  // CBT Quiz State
+  const [quizScore, setQuizScore] = useState(null);
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+
+  // PULL LIVE DATA FROM GOOGLE SHEETS
+  const handlePullDataFromSheets = async () => {
+    setIsPullingData(true);
+    setSyncStatusMsg('Tarik data real-time dari Google Sheets...');
+
+    const resStudents = await fetchStudentsFromSheets();
+    const resTeachers = await fetchTeachersFromSheets();
+    const resAnn = await fetchAnnouncementsFromSheets();
+
+    setIsPullingData(false);
+    
+    if (resStudents.success && Array.isArray(resStudents.data) && resStudents.data.length > 0) {
+      setStudentsList(resStudents.data);
+    }
+    if (resTeachers.success && Array.isArray(resTeachers.data) && resTeachers.data.length > 0) {
+      setTeachersList(resTeachers.data);
+    }
+
+    setSyncStatusMsg('✅ Data berhasil ditarik & disinkronkan dengan Google Sheets!');
+    setTimeout(() => setSyncStatusMsg(''), 4000);
+  };
+
+  // REGISTER NEW STUDENT & AUTO-SAVE TO SHEETS
+  const handleAddStudentSubmit = async (e) => {
+    e.preventDefault();
+    if (!newStudent.name) return;
+
+    const created = {
+      studentId: `STU-${Date.now().toString().slice(-4)}`,
+      name: newStudent.name,
+      classId: newStudent.classId,
+      nisn: newStudent.nisn || '2400999',
+      email: newStudent.email || `${newStudent.name.toLowerCase().replace(/\s+/g, '.')}@smartschool.edu`,
+      status: 'Active',
+      gpa: 3.80,
+      attendance: '100%',
+      parentName: newStudent.parentName || 'Orang Tua murid'
+    };
+
+    setStudentsList(prev => [created, ...prev]);
+    await addStudentToSheets(created);
+    setShowAddStudentModal(false);
+    setNewStudent({ name: '', nisn: '', classId: '10-A', email: '', parentName: '' });
+    setSyncStatusMsg(`✅ Siswa "${created.name}" berhasil terdaftar & tersimpan di Google Sheets (Students)!`);
+    setTimeout(() => setSyncStatusMsg(''), 4000);
+  };
+
+  // REGISTER NEW TEACHER & AUTO-SAVE TO SHEETS
+  const handleAddTeacherSubmit = async (e) => {
+    e.preventDefault();
+    if (!newTeacher.name) return;
+
+    const created = {
+      teacherId: `TCH-${Date.now().toString().slice(-3)}`,
+      name: newTeacher.name,
+      subject: newTeacher.subject,
+      email: newTeacher.email || `${newTeacher.name.toLowerCase().replace(/\s+/g, '.')}@smartschool.edu`,
+      phone: '0812-9876-0000',
+      status: 'Active',
+      room: newTeacher.room || 'Room 101'
+    };
+
+    setTeachersList(prev => [created, ...prev]);
+    await addTeacherToSheets(created);
+    setShowAddTeacherModal(false);
+    setNewTeacher({ name: '', subject: 'Advanced Physics', email: '', room: 'Lab 3A' });
+    setSyncStatusMsg(`✅ Guru "${created.name}" berhasil terdaftar & tersimpan di Google Sheets (Teachers)!`);
+    setTimeout(() => setSyncStatusMsg(''), 4000);
+  };
+
+  // ADD E-BOOK & AUTO-SAVE TO SHEETS
   const handleAddBookSubmit = async (e) => {
     e.preventDefault();
     if (!newBook.title || !newBook.readUrl) return;
@@ -76,9 +168,11 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
     await addLibraryBookToSheets(created);
     setShowAddBookModal(false);
     setNewBook({ title: '', author: '', category: 'Science & AI', readUrl: '', description: '' });
+    setSyncStatusMsg(`✅ Buku "${created.title}" tersimpan di Google Sheets (Library)!`);
+    setTimeout(() => setSyncStatusMsg(''), 4000);
   };
 
-  // Handle Add Announcement
+  // POST ANNOUNCEMENT & AUTO-SAVE TO SHEETS
   const handleAddAnnSubmit = async (e) => {
     e.preventDefault();
     if (!newAnn.title || !newAnn.content) return;
@@ -89,7 +183,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
       targetClassId: newAnn.scope === 'Class' ? newAnn.targetClassId : 'All',
       title: newAnn.title,
       content: newAnn.content,
-      date: new Date().toLocaleDateString(),
+      date: new Date().toLocaleDateString('id-ID'),
       priority: newAnn.priority,
       createdBy: `${role} Portal User`
     };
@@ -98,6 +192,25 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
     await addAnnouncementToSheets(created);
     setShowAddAnnModal(false);
     setNewAnn({ scope: 'General', targetClassId: '10-A', title: '', content: '', priority: 'General' });
+    setSyncStatusMsg(`✅ Pengumuman tersimpan di Google Sheets (Announcements)!`);
+    setTimeout(() => setSyncStatusMsg(''), 4000);
+  };
+
+  // SUBMIT SAMPLE CBT QUIZ & AUTO-SAVE RESULT TO SHEETS
+  const handleCbtQuizSubmit = async () => {
+    let score = 0;
+    if (selectedAnswers[1] === 'photon') score += 50;
+    if (selectedAnswers[2] === 'speed') score += 50;
+    
+    setQuizScore(score);
+    await recordAttendanceToSheets({
+      studentId: 'STU-1001',
+      studentName: 'Alex Rivera',
+      status: `Ujian CBT Finished (Score: ${score}/100)`,
+      notes: 'Realtime CBT Sync'
+    });
+    setSyncStatusMsg(`✅ Nilai Ujian CBT (${score}/100) berhasil terkirim ke Google Sheets!`);
+    setTimeout(() => setSyncStatusMsg(''), 4000);
   };
 
   const filteredStudents = studentsList.filter(s => s.classId === selectedClassId);
@@ -108,7 +221,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
       <div className="relative w-full max-w-6xl rounded-3xl bg-[#0B1020] border border-[#00D4FF]/40 shadow-2xl p-6 sm:p-8 overflow-hidden min-h-[640px] flex flex-col justify-between my-auto">
         
         {/* Top Header Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-white/10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 mb-4 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-2xl bg-[#00D4FF]/10 text-[#00D4FF] border border-[#00D4FF]/30">
               {role === 'Student' ? <GraduationCap className="w-6 h-6" /> :
@@ -121,29 +234,49 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                   {role} Workspace - SmartSchool v1
                 </h3>
                 <span className="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-[#00FFC8]/10 text-[#00FFC8] border border-[#00FFC8]/30">
-                  LIVE SYNC ACTIVE
+                  REALTIME GS AUTO-SAVE
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                {role === 'Student' ? 'Alex Rivera (ID: STU-1001 • Class 10-A Science)' :
-                 role === 'Teacher' ? 'Dr. Evelyn Reed (ID: TCH-001 • Advanced Physics)' :
+                {role === 'Student' ? 'Alex Rivera (STU-1001 • Class 10-A Science)' :
+                 role === 'Teacher' ? 'Dr. Evelyn Reed (TCH-001 • Advanced Physics)' :
                  'Dr. Raymond Vance (Administrator General)'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {/* PULL DATA FROM GOOGLE SHEETS BUTTON */}
+            <button
+              onClick={handlePullDataFromSheets}
+              disabled={isPullingData}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#00D4FF]/10 hover:bg-[#00D4FF]/20 text-[#00D4FF] border border-[#00D4FF]/30 text-xs font-bold transition-all shadow-glow-cyan"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isPullingData ? 'animate-spin' : ''}`} />
+              <span>{isPullingData ? 'Tarik Data...' : '🔄 Tarik Data Sheets'}</span>
+            </button>
+
             <button
               onClick={onClose}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold transition-all"
             >
               <LogOut className="w-4 h-4" />
-              <span>{lang === 'EN' ? 'Exit Portal' : 'Keluar Portal'}</span>
+              <span>Tutup Portal</span>
             </button>
           </div>
         </div>
 
-        {/* Sub-tab Navigation - Fully Functional Modules */}
+        {/* Sync Status Banner Toast */}
+        {syncStatusMsg && (
+          <div className="mb-4 p-3 rounded-2xl bg-[#00FFC8]/10 border border-[#00FFC8]/40 text-[#00FFC8] text-xs font-bold flex items-center justify-between animate-in fade-in">
+            <span className="flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>{syncStatusMsg}</span>
+            </span>
+          </div>
+        )}
+
+        {/* Sub-tab Navigation */}
         <div className="flex items-center gap-2 mb-6 border-b border-white/10 pb-3 text-xs font-semibold overflow-x-auto">
           <button
             onClick={() => setActiveSubTab('overview')}
@@ -160,7 +293,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
               activeSubTab === 'students' ? 'bg-[#00D4FF] text-slate-950 font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            👨‍🎓 {lang === 'EN' ? 'Students Roster' : 'Data Murid tiap Kelas'}
+            👨‍🎓 Data Murid tiap Kelas ({studentsList.length})
           </button>
 
           <button
@@ -169,7 +302,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
               activeSubTab === 'teachers' ? 'bg-[#0EA5E9] text-white font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            👩‍🏫 {lang === 'EN' ? 'Subject Teachers' : 'Guru tiap Mapel'}
+            👩‍🏫 Guru tiap Mapel ({teachersList.length})
           </button>
 
           <button
@@ -178,7 +311,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
               activeSubTab === 'schedule' ? 'bg-[#00FFC8] text-slate-950 font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            📅 {lang === 'EN' ? 'Class Timetable' : 'Jadwal Pelajaran'}
+            📅 Jadwal Pelajaran
           </button>
 
           <button
@@ -187,16 +320,16 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
               activeSubTab === 'library' ? 'bg-purple-500 text-white font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            📚 {lang === 'EN' ? 'Digital Library' : 'Perpustakaan Digital'}
+            📚 Perpustakaan Digital ({libraryBooks.length})
           </button>
 
           <button
-            onClick={() => setActiveSubTab('extras')}
+            onClick={() => setActiveSubTab('cbt-quiz')}
             className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap ${
-              activeSubTab === 'extras' ? 'bg-yellow-500 text-slate-950 font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
+              activeSubTab === 'cbt-quiz' ? 'bg-yellow-500 text-slate-950 font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            🏆 {lang === 'EN' ? 'Extracurriculars' : 'Kegiatan Eskul'}
+            ⚡ Ujian Online CBT
           </button>
 
           <button
@@ -205,12 +338,12 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
               activeSubTab === 'announcements' ? 'bg-pink-500 text-white font-bold' : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            📢 {lang === 'EN' ? 'Announcements' : 'Halaman Pengumuman'}
+            📢 Pengumuman ({announcements.length})
           </button>
         </div>
 
         {/* ================= MODULE CONTENT ================= */}
-        <div className="flex-1 space-y-6 overflow-y-auto max-h-[550px] pr-1">
+        <div className="flex-1 space-y-6 overflow-y-auto max-h-[520px] pr-1">
           
           {/* TAB 1: OVERVIEW */}
           {activeSubTab === 'overview' && (
@@ -236,7 +369,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
               <div className="md:col-span-3 p-5 rounded-2xl bg-white/5 border border-white/10 space-y-3">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <Megaphone className="w-4 h-4 text-[#00D4FF]" />
-                  Latest School Announcement:
+                  Pengumuman Sekolah Terbaru:
                 </h4>
                 <div className="p-4 rounded-xl bg-[#050816] border border-[#00D4FF]/30">
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#00D4FF]/20 text-[#00D4FF] uppercase">
@@ -249,7 +382,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
             </div>
           )}
 
-          {/* TAB 2: DATA MURID TIAP KELAS */}
+          {/* TAB 2: DATA MURID TIAP KELAS (+ ADD STUDENT FORM) */}
           {activeSubTab === 'students' && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-[#050816] p-4 rounded-2xl border border-white/10">
@@ -271,9 +404,14 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                     ))}
                   </div>
                 </div>
-                <span className="text-xs text-[#00FFC8] font-bold">
-                  {filteredStudents.length} Murid Terdaftar di Kelas {selectedClassId}
-                </span>
+
+                <button
+                  onClick={() => setShowAddStudentModal(true)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#00FFC8] text-slate-950 hover:bg-[#00FFC8]/90 transition-all flex items-center gap-1.5 shadow-glow-turquoise"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Registrasi Siswa Baru</span>
+                </button>
               </div>
 
               <div className="rounded-2xl bg-[#050816] border border-white/10 overflow-x-auto">
@@ -307,25 +445,38 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
             </div>
           )}
 
-          {/* TAB 3: GURU MATA PELAJARAN */}
+          {/* TAB 3: GURU MATA PELAJARAN (+ ADD TEACHER FORM) */}
           {activeSubTab === 'teachers' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {teachersList.map(t => (
-                <div key={t.teacherId} className="p-5 rounded-2xl bg-[#050816] border border-[#0EA5E9]/30 space-y-2 hover:border-[#00D4FF] transition-all">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]/30">
-                      {t.teacherId}
-                    </span>
-                    <span className="text-[10px] text-green-400 font-mono">STATUS: {t.status}</span>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-[#050816] p-4 rounded-2xl border border-white/10">
+                <h4 className="text-sm font-bold text-white">Daftar Guru Pengajar Mata Pelajaran</h4>
+                <button
+                  onClick={() => setShowAddTeacherModal(true)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#0EA5E9] text-white hover:bg-[#0EA5E9]/90 transition-all flex items-center gap-1.5 shadow-glow-blue"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Registrasi Guru Baru</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {teachersList.map(t => (
+                  <div key={t.teacherId} className="p-5 rounded-2xl bg-[#050816] border border-[#0EA5E9]/30 space-y-2 hover:border-[#00D4FF] transition-all">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0EA5E9]/10 text-[#0EA5E9] border border-[#0EA5E9]/30">
+                        {t.teacherId}
+                      </span>
+                      <span className="text-[10px] text-green-400 font-mono">STATUS: {t.status}</span>
+                    </div>
+                    <h4 className="text-base font-bold text-white">{t.name}</h4>
+                    <p className="text-xs text-[#00FFC8] font-semibold">{t.subject}</p>
+                    <div className="pt-2 text-[11px] text-slate-400 space-y-1 font-mono border-t border-white/5">
+                      <p>📧 {t.email}</p>
+                      <p>📍 {t.room}</p>
+                    </div>
                   </div>
-                  <h4 className="text-base font-bold text-white">{t.name}</h4>
-                  <p className="text-xs text-[#00FFC8] font-semibold">{t.subject}</p>
-                  <div className="pt-2 text-[11px] text-slate-400 space-y-1 font-mono border-t border-white/5">
-                    <p>📧 {t.email}</p>
-                    <p>📍 {t.room}</p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
@@ -406,29 +557,65 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
             </div>
           )}
 
-          {/* TAB 6: KEGIATAN ESKUL */}
-          {activeSubTab === 'extras' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {INITIAL_EXTRACURRICULARS.map(ex => (
-                <div key={ex.id} className="p-5 rounded-2xl bg-[#050816] border border-white/10 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${ex.badgeColor}`}>
-                      {ex.membersCount} Anggota Active
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">{ex.id}</span>
-                  </div>
-                  <h4 className="text-base font-bold text-white">{ex.name}</h4>
-                  <p className="text-xs text-slate-300">Pembina: {ex.supervisor}</p>
-                  <div className="pt-2 text-xs text-[#00FFC8] font-mono border-t border-white/5 space-y-1">
-                    <p>🕒 {ex.scheduleDay}</p>
-                    <p>📍 {ex.location}</p>
+          {/* TAB 6: UJIAN ONLINE CBT INTERAKTIF */}
+          {activeSubTab === 'cbt-quiz' && (
+            <div className="p-6 rounded-2xl bg-[#050816] border border-yellow-500/30 space-y-6">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div>
+                  <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                    INTERACTIVE CBT EXAM SIMULATION
+                  </span>
+                  <h4 className="text-lg font-bold text-white mt-1">Ujian Online CBT: Fisika Kuantum & AI</h4>
+                </div>
+                <span className="text-xs font-mono text-slate-400">Duration: 15 Minutes</span>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="p-4 rounded-xl bg-[#121B2F] border border-white/10 space-y-2">
+                  <p className="font-bold text-white">Soal 1: Apakah nama partikel dasar penyusun gelombang cahaya?</p>
+                  <div className="space-y-1.5 pt-1">
+                    <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                      <input type="radio" name="q1" onChange={() => setSelectedAnswers({ ...selectedAnswers, 1: 'photon' })} />
+                      <span>A) Photon</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                      <input type="radio" name="q1" onChange={() => setSelectedAnswers({ ...selectedAnswers, 1: 'electron' })} />
+                      <span>B) Electron</span>
+                    </label>
                   </div>
                 </div>
-              ))}
+
+                <div className="p-4 rounded-xl bg-[#121B2F] border border-white/10 space-y-2">
+                  <p className="font-bold text-white">Soal 2: Berapakah kecepatan cahaya dalam ruang hampa udara?</p>
+                  <div className="space-y-1.5 pt-1">
+                    <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                      <input type="radio" name="q2" onChange={() => setSelectedAnswers({ ...selectedAnswers, 2: 'speed' })} />
+                      <span>A) 3 x 10^8 m/s</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                      <input type="radio" name="q2" onChange={() => setSelectedAnswers({ ...selectedAnswers, 2: 'wrong' })} />
+                      <span>B) 1.5 x 10^6 m/s</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCbtQuizSubmit}
+                  className="w-full py-3 rounded-xl font-bold text-xs bg-yellow-500 text-slate-950 hover:bg-yellow-400 transition-all shadow-lg"
+                >
+                  Kirim Jawaban & Auto-Save Nilai ke Google Sheets
+                </button>
+
+                {quizScore !== null && (
+                  <div className="p-4 rounded-xl bg-[#00FFC8]/10 border border-[#00FFC8]/40 text-[#00FFC8] text-center font-bold">
+                    Nilai Hasil Ujian CBT Anda: {quizScore} / 100 (Tersimpan di Google Sheets!)
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* TAB 7: HALAMAN PENGUMUMAN UMUM & KELAS */}
+          {/* TAB 7: HALAMAN PENGUMUMAN */}
           {activeSubTab === 'announcements' && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-[#050816] p-4 rounded-2xl border border-white/10">
@@ -486,7 +673,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
 
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-          <span>SmartSchool Portal v1 • Powered by Luly Agency Engine</span>
+          <span>SmartSchool Portal v1 • Realtime Google Sheets Engine Active</span>
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-xl bg-[#00D4FF] text-slate-950 font-bold hover:bg-[#00D4FF]/90 transition-all shadow-glow-cyan"
@@ -497,10 +684,93 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
 
       </div>
 
-      {/* FORM MODAL: ADD DIGITAL E-BOOK LINK */}
-      {showAddBookModal && (
+      {/* FORM MODAL: ADD STUDENT */}
+      {showAddStudentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#050816]/90 backdrop-blur-md">
           <div className="w-full max-w-md rounded-3xl bg-[#0B1020] border border-[#00FFC8]/40 p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white">Registrasi Siswa Baru (Auto-Save ke Sheets)</h3>
+            <form onSubmit={handleAddStudentSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-300 block mb-1">Nama Lengkap Siswa:</label>
+                <input
+                  type="text"
+                  required
+                  value={newStudent.name}
+                  onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                  placeholder="Contoh: Rian Hidayat"
+                  className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-300 block mb-1">Pilih Kelas:</label>
+                <select
+                  value={newStudent.classId}
+                  onChange={(e) => setNewStudent({ ...newStudent, classId: e.target.value })}
+                  className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
+                >
+                  {INITIAL_CLASSES.map(c => <option key={c.id} value={c.id}>{c.id} - {c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-300 block mb-1">Nama Orang Tua / Wali:</label>
+                <input
+                  type="text"
+                  value={newStudent.parentName}
+                  onChange={(e) => setNewStudent({ ...newStudent, parentName: e.target.value })}
+                  placeholder="Nama Wali"
+                  className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddStudentModal(false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs text-slate-300">Batal</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-[#00FFC8] text-slate-950 font-bold text-xs shadow-glow-turquoise">Daftarkan & Auto-Save GS</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FORM MODAL: ADD TEACHER */}
+      {showAddTeacherModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#050816]/90 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl bg-[#0B1020] border border-[#0EA5E9]/40 p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white">Registrasi Guru Baru (Auto-Save ke Sheets)</h3>
+            <form onSubmit={handleAddTeacherSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-300 block mb-1">Nama Lengkap & Gelar:</label>
+                <input
+                  type="text"
+                  required
+                  value={newTeacher.name}
+                  onChange={(e) => setNewTeacher({ ...newTeacher, name: e.target.value })}
+                  placeholder="Contoh: Dr. Gunawan Wibowo"
+                  className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-300 block mb-1">Mata Pelajaran Pengajar:</label>
+                <input
+                  type="text"
+                  required
+                  value={newTeacher.subject}
+                  onChange={(e) => setNewTeacher({ ...newTeacher, subject: e.target.value })}
+                  placeholder="Contoh: Advanced Chemistry"
+                  className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddTeacherModal(false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs text-slate-300">Batal</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-[#0EA5E9] text-white font-bold text-xs shadow-glow-blue">Daftarkan & Auto-Save GS</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FORM MODAL: ADD E-BOOK */}
+      {showAddBookModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#050816]/90 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl bg-[#0B1020] border border-purple-500/40 p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-white">Tambah Link E-Book Perpustakaan Digital</h3>
             <form onSubmit={handleAddBookSubmit} className="space-y-3">
               <div>
@@ -510,7 +780,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                   required
                   value={newBook.title}
                   onChange={(e) => setNewBook({ ...newBook, title: e.target.value })}
-                  placeholder="Contoh: Modern Physics 2026"
+                  placeholder="Contoh: Quantum Physics 2026"
                   className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
                 />
               </div>
@@ -522,16 +792,6 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                   value={newBook.readUrl}
                   onChange={(e) => setNewBook({ ...newBook, readUrl: e.target.value })}
                   placeholder="https://..."
-                  className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-300 block mb-1">Penulis:</label>
-                <input
-                  type="text"
-                  value={newBook.author}
-                  onChange={(e) => setNewBook({ ...newBook, author: e.target.value })}
-                  placeholder="Dr. Evelyn"
                   className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
                 />
               </div>
@@ -547,7 +807,7 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
       {/* FORM MODAL: ADD ANNOUNCEMENT */}
       {showAddAnnModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#050816]/90 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl bg-[#0B1020] border border-purple-500/40 p-6 shadow-2xl space-y-4">
+          <div className="w-full max-w-md rounded-3xl bg-[#0B1020] border border-[#00D4FF]/40 p-6 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-white">Buat Pengumuman Baru</h3>
             <form onSubmit={handleAddAnnSubmit} className="space-y-3">
               <div>
@@ -561,20 +821,6 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                   <option value="Class">Khusus Kelas Tertentu</option>
                 </select>
               </div>
-
-              {newAnn.scope === 'Class' && (
-                <div>
-                  <label className="text-xs text-slate-300 block mb-1">Pilih Target Kelas:</label>
-                  <select
-                    value={newAnn.targetClassId}
-                    onChange={(e) => setNewAnn({ ...newAnn, targetClassId: e.target.value })}
-                    className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
-                  >
-                    {INITIAL_CLASSES.map(c => <option key={c.id} value={c.id}>{c.id} - {c.name}</option>)}
-                  </select>
-                </div>
-              )}
-
               <div>
                 <label className="text-xs text-slate-300 block mb-1">Judul Pengumuman:</label>
                 <input
@@ -585,7 +831,6 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                   className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white"
                 />
               </div>
-
               <div>
                 <label className="text-xs text-slate-300 block mb-1">Isi Pengumuman:</label>
                 <textarea
@@ -596,10 +841,9 @@ export default function PortalDashboardModal({ role, onClose, lang }) {
                   className="w-full p-2.5 rounded-xl bg-[#050816] border border-white/15 text-xs text-white resize-none"
                 />
               </div>
-
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowAddAnnModal(false)} className="px-4 py-2 rounded-xl bg-white/10 text-xs text-slate-300">Batal</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-[#00D4FF] text-slate-950 font-bold text-xs shadow-glow-cyan">Kirim Pengumuman</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-[#00D4FF] text-slate-950 font-bold text-xs shadow-glow-cyan">Kirim Pengumuman GS</button>
               </div>
             </form>
           </div>

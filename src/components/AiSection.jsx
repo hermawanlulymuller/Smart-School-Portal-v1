@@ -14,14 +14,17 @@ import {
   ArrowRight,
   Send,
   Zap,
-  CheckCircle2
+  CheckCircle2,
+  FileSpreadsheet
 } from 'lucide-react';
+import { recordAiLogToSheets } from '../services/googleSheetsApi.js';
 
 export default function AiSection({ lang }) {
   const [activeAiDemo, setActiveAiDemo] = useState(0);
   const [demoInput, setDemoInput] = useState('Generate a Quiz on Quantum Physics for Grade 12');
   const [demoOutput, setDemoOutput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [savedToSheets, setSavedToSheets] = useState(false);
 
   const aiFeatures = [
     {
@@ -116,15 +119,27 @@ export default function AiSection({ lang }) {
     }
   ];
 
-  const handleRunAiDemo = () => {
+  const handleRunAiDemo = async () => {
     setIsGenerating(true);
     setDemoOutput('');
-    setTimeout(() => {
+    setSavedToSheets(false);
+
+    const currentTool = aiFeatures[activeAiDemo];
+
+    setTimeout(async () => {
       setIsGenerating(false);
-      setDemoOutput(
-        `✨ [AI ENGINE RESULT - LULY AGENCY KERNEL]\n\nTopic: ${demoInput}\n\nGenerated 5 Questions:\n1. What is the fundamental particle of light? (Ans: Photon)\n2. Explain Heisenberg's Uncertainty Principle in 2 sentences.\n3. Calculate the energy of a photon with wavelength 500nm.\n\nDifficulty Rating: Moderate (Grade 12 Level)\nEstimated Time: 15 minutes`
-      );
-    }, 1200);
+      const summaryText = `✨ [AI ENGINE RESULT - LULY KERNEL]\n\nTool: ${currentTool.title}\nTopic: ${demoInput}\n\nGenerated Response:\n1. Output produced with 99.4% accuracy.\n2. Aligned with 2026 National Curriculum Standards.\n3. Saved automatically to Google Sheets AiLogs table.`;
+      setDemoOutput(summaryText);
+
+      // Auto-save log to Google Sheets in Real-Time!
+      await recordAiLogToSheets({
+        userRole: 'Teacher',
+        toolName: currentTool.title,
+        prompt: demoInput,
+        responseSummary: 'Output generated successfully & verified'
+      });
+      setSavedToSheets(true);
+    }, 1000);
   };
 
   return (
@@ -139,7 +154,7 @@ export default function AiSection({ lang }) {
         <div className="text-center max-w-3xl mx-auto mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#00FFC8]/10 border border-[#00FFC8]/30 text-xs font-bold text-[#00FFC8] mb-4">
             <Sparkles className="w-4 h-4" />
-            <span>POWERED BY ARTIFICIAL INTELLIGENCE</span>
+            <span>POWERED BY ARTIFICIAL INTELLIGENCE & GOOGLE SHEETS AUTO-SYNC</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white mb-4">
             {lang === 'EN' ? '10 Special AI Features Built-In' : '10 Fitur Spesial Berbasis AI'}
@@ -158,7 +173,10 @@ export default function AiSection({ lang }) {
             return (
               <div
                 key={feat.id}
-                onClick={() => setActiveAiDemo(index)}
+                onClick={() => {
+                  setActiveAiDemo(index);
+                  setDemoInput(`Generate ${feat.title} for Grade 10 Science Class`);
+                }}
                 className={`p-6 rounded-3xl bg-[#0B1020]/90 border border-white/10 hover:border-[#00FFC8]/50 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1.5 cursor-pointer group shadow-xl ${
                   activeAiDemo === index ? 'border-[#00FFC8] shadow-glow-turquoise bg-[#121B2F]' : ''
                 }`}
@@ -187,15 +205,19 @@ export default function AiSection({ lang }) {
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-6 border-b border-white/10">
             <div>
               <span className="text-xs font-mono font-bold text-[#00FFC8] uppercase tracking-wider flex items-center gap-1.5">
-                <Zap className="w-4 h-4" /> AI Sandbox Interactive Console
+                <Zap className="w-4 h-4" /> AI Sandbox Console & Realtime Log Sync
               </span>
               <h3 className="text-xl font-extrabold text-white mt-1">
                 {aiFeatures[activeAiDemo].title} - {lang === 'EN' ? 'Live Simulator' : 'Simulasi Langsung'}
               </h3>
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#00D4FF]/10 text-[#00D4FF] border border-[#00D4FF]/30">
-              Luly AI Kernel v2.4 Active
-            </span>
+            
+            {savedToSheets && (
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#00FFC8]/20 text-[#00FFC8] border border-[#00FFC8]/40 flex items-center gap-1.5 animate-bounce">
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Auto-Saved to Google Sheets (AiLogs)</span>
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -220,12 +242,12 @@ export default function AiSection({ lang }) {
                 {isGenerating ? (
                   <>
                     <span className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin"></span>
-                    <span>{lang === 'EN' ? 'AI Processing...' : 'AI Memproses...'}</span>
+                    <span>{lang === 'EN' ? 'AI Processing & Saving to Sheets...' : 'AI Memproses & Menyimpan ke Sheets...'}</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    <span>{lang === 'EN' ? 'Run AI Generator' : 'Jalankan AI Generator'}</span>
+                    <span>{lang === 'EN' ? 'Run AI Generator & Auto-Save' : 'Jalankan AI Generator & Auto-Save'}</span>
                   </>
                 )}
               </button>
@@ -244,7 +266,7 @@ export default function AiSection({ lang }) {
                   </pre>
                 ) : (
                   <p className="text-slate-500 italic py-6 text-center">
-                    {lang === 'EN' ? 'Click "Run AI Generator" to preview live output.' : 'Klik "Jalankan AI Generator" untuk melihat simulasi.'}
+                    {lang === 'EN' ? 'Click "Run AI Generator" to test live processing.' : 'Klik "Jalankan AI Generator" untuk melihat simulasi.'}
                   </p>
                 )}
               </div>

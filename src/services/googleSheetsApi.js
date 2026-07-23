@@ -1,5 +1,6 @@
 /**
- * SmartSchool Portal v1 - Google Sheets Database Service
+ * SmartSchool Portal v1 - Realtime Google Sheets Database Service
+ * Provides bidirectional real-time sync (Pull data from Sheets & Auto-save to Sheets)
  */
 
 const STORAGE_KEY_URL = 'smartschool_google_script_url';
@@ -19,6 +20,7 @@ export const setScriptUrl = (url) => {
 async function callSheetsApi(action, payload = {}) {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) {
+    // Local simulation fallback
     return { success: true, simulated: true, action, payload };
   }
 
@@ -38,6 +40,7 @@ async function callSheetsApi(action, payload = {}) {
   }
 }
 
+// ================= PULL DATA FROM GOOGLE SHEETS =================
 export async function setupGoogleSheetDatabase() {
   return await callSheetsApi('setupDatabase');
 }
@@ -62,17 +65,18 @@ export async function fetchAnnouncementsFromSheets() {
   return await callSheetsApi('getAnnouncements');
 }
 
+// ================= REALTIME AUTO-SAVE TO GOOGLE SHEETS =================
 export async function recordAttendanceToSheets(attendanceObj) {
   const data = {
     attendanceId: `ATT-${Date.now()}`,
     studentId: attendanceObj.studentId || 'STU-1001',
     studentName: attendanceObj.studentName || 'Alex Rivera',
     classId: attendanceObj.classId || '10-A',
-    date: new Date().toLocaleDateString(),
-    time: new Date().toLocaleTimeString(),
+    date: new Date().toLocaleDateString('id-ID'),
+    time: new Date().toLocaleTimeString('id-ID'),
     status: attendanceObj.status || 'Present',
     location: attendanceObj.location || 'Smart Gate QR',
-    notes: attendanceObj.notes || 'Automated Sync'
+    notes: attendanceObj.notes || 'Realtime Auto-Sync'
   };
   return await callSheetsApi('addAttendance', { data });
 }
@@ -81,17 +85,17 @@ export async function recordAiLogToSheets(aiLogObj) {
   const data = {
     logId: `LOG-${Date.now()}`,
     userRole: aiLogObj.userRole || 'Student',
-    toolName: aiLogObj.toolName || 'AI Quiz Generator',
+    toolName: aiLogObj.toolName || 'AI Generator',
     prompt: aiLogObj.prompt || '',
     responseSummary: aiLogObj.responseSummary || 'Generated Successfully',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toLocaleString('id-ID')
   };
   return await callSheetsApi('addAiLog', { data });
 }
 
 export async function addStudentToSheets(studentObj) {
   const data = {
-    studentId: `STU-${Date.now()}`,
+    studentId: studentObj.studentId || `STU-${Date.now()}`,
     name: studentObj.name,
     gender: studentObj.gender || 'Laki-laki',
     entryYear: studentObj.entryYear || 2026,
@@ -109,7 +113,7 @@ export async function addStudentToSheets(studentObj) {
 
 export async function addTeacherToSheets(teacherObj) {
   const data = {
-    teacherId: `TCH-${Date.now()}`,
+    teacherId: teacherObj.teacherId || `TCH-${Date.now()}`,
     name: teacherObj.name,
     gender: teacherObj.gender || 'Perempuan',
     entryYear: teacherObj.entryYear || 2026,
@@ -125,7 +129,7 @@ export async function addTeacherToSheets(teacherObj) {
 
 export async function addLibraryBookToSheets(bookObj) {
   const data = {
-    id: `LIB-${Date.now()}`,
+    id: bookObj.id || `LIB-${Date.now()}`,
     title: bookObj.title,
     author: bookObj.author || 'Guest Author',
     category: bookObj.category || 'General',
@@ -137,12 +141,12 @@ export async function addLibraryBookToSheets(bookObj) {
 
 export async function addAnnouncementToSheets(annObj) {
   const data = {
-    id: `ANN-${Date.now()}`,
+    id: annObj.id || `ANN-${Date.now()}`,
     scope: annObj.scope || 'General',
     targetClassId: annObj.targetClassId || 'All',
     title: annObj.title,
     content: annObj.content,
-    date: new Date().toLocaleDateString(),
+    date: new Date().toLocaleDateString('id-ID'),
     priority: annObj.priority || 'General',
     createdBy: annObj.createdBy || 'Teacher'
   };
