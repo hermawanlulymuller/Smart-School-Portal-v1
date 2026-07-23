@@ -1,6 +1,5 @@
 /**
  * SmartSchool Portal v1 - Realtime Google Sheets Database Service
- * Provides bidirectional real-time sync (Pull data from Sheets & Auto-save to Sheets)
  */
 
 const STORAGE_KEY_URL = 'smartschool_google_script_url';
@@ -20,7 +19,6 @@ export const setScriptUrl = (url) => {
 async function callSheetsApi(action, payload = {}) {
   const scriptUrl = getScriptUrl();
   if (!scriptUrl) {
-    // Local simulation fallback
     return { success: true, simulated: true, action, payload };
   }
 
@@ -40,7 +38,6 @@ async function callSheetsApi(action, payload = {}) {
   }
 }
 
-// ================= PULL DATA FROM GOOGLE SHEETS =================
 export async function setupGoogleSheetDatabase() {
   return await callSheetsApi('setupDatabase');
 }
@@ -51,6 +48,10 @@ export async function fetchStudentsFromSheets() {
 
 export async function fetchTeachersFromSheets() {
   return await callSheetsApi('getTeachers');
+}
+
+export async function fetchSubjectsFromSheets() {
+  return await callSheetsApi('getSubjects');
 }
 
 export async function fetchAttendanceFromSheets() {
@@ -65,42 +66,20 @@ export async function fetchAnnouncementsFromSheets() {
   return await callSheetsApi('getAnnouncements');
 }
 
-// ================= REALTIME AUTO-SAVE TO GOOGLE SHEETS =================
-export async function recordAttendanceToSheets(attendanceObj) {
-  const data = {
-    attendanceId: `ATT-${Date.now()}`,
-    studentId: attendanceObj.studentId || 'STU-1001',
-    studentName: attendanceObj.studentName || 'Alex Rivera',
-    classId: attendanceObj.classId || '10-A',
-    date: new Date().toLocaleDateString('id-ID'),
-    time: new Date().toLocaleTimeString('id-ID'),
-    status: attendanceObj.status || 'Present',
-    location: attendanceObj.location || 'Smart Gate QR',
-    notes: attendanceObj.notes || 'Realtime Auto-Sync'
-  };
-  return await callSheetsApi('addAttendance', { data });
+export async function fetchQuizzesFromSheets() {
+  return await callSheetsApi('getQuizzes');
 }
 
-export async function recordAiLogToSheets(aiLogObj) {
-  const data = {
-    logId: `LOG-${Date.now()}`,
-    userRole: aiLogObj.userRole || 'Student',
-    toolName: aiLogObj.toolName || 'AI Generator',
-    prompt: aiLogObj.prompt || '',
-    responseSummary: aiLogObj.responseSummary || 'Generated Successfully',
-    timestamp: new Date().toLocaleString('id-ID')
-  };
-  return await callSheetsApi('addAiLog', { data });
-}
-
+// Add Student matching exact Google Sheets schema:
+// ['studentId', 'name', 'gender', 'entryYear', 'studentNumber', 'password', 'classId', 'email', 'phone', 'parentName', 'parentPhone', 'status']
 export async function addStudentToSheets(studentObj) {
   const data = {
-    studentId: studentObj.studentId || `STU-${Date.now()}`,
+    studentId: studentObj.studentId || `STU-${Date.now().toString().slice(-4)}`,
     name: studentObj.name,
     gender: studentObj.gender || 'Laki-laki',
     entryYear: studentObj.entryYear || 2026,
     studentNumber: studentObj.studentNumber || '24001',
-    password: studentObj.password || 'password123',
+    password: studentObj.password || 'student123',
     classId: studentObj.classId || '10-A',
     email: studentObj.email || '',
     phone: studentObj.phone || '',
@@ -111,9 +90,11 @@ export async function addStudentToSheets(studentObj) {
   return await callSheetsApi('addStudent', { data });
 }
 
+// Add Teacher matching exact Google Sheets schema:
+// ['teacherId', 'name', 'gender', 'entryYear', 'teacherNumber', 'password', 'email', 'phone', 'status', 'subject']
 export async function addTeacherToSheets(teacherObj) {
   const data = {
-    teacherId: teacherObj.teacherId || `TCH-${Date.now()}`,
+    teacherId: teacherObj.teacherId || `TCH-${Date.now().toString().slice(-3)}`,
     name: teacherObj.name,
     gender: teacherObj.gender || 'Perempuan',
     entryYear: teacherObj.entryYear || 2026,
@@ -122,9 +103,65 @@ export async function addTeacherToSheets(teacherObj) {
     email: teacherObj.email || '',
     phone: teacherObj.phone || '',
     status: 'Active',
-    subject: teacherObj.subject || 'General'
+    subject: teacherObj.subject || 'Advanced Physics'
   };
   return await callSheetsApi('addTeacher', { data });
+}
+
+// Add Subject matching schema:
+// ['subjectId', 'subjectName', 'category', 'teacherName', 'weeklyHours']
+export async function addSubjectToSheets(subObj) {
+  const data = {
+    subjectId: subObj.subjectId || `SUB-${Date.now().toString().slice(-3)}`,
+    subjectName: subObj.subjectName,
+    category: subObj.category || 'Science & AI',
+    teacherName: subObj.teacherName || 'Dr. Evelyn Reed',
+    weeklyHours: subObj.weeklyHours || 4
+  };
+  return await callSheetsApi('addSubject', { data });
+}
+
+// Add Quiz matching schema:
+// ['quizId', 'title', 'subject', 'classId', 'dueDate', 'duration', 'createdBy', 'questionsJson']
+export async function addQuizToSheets(quizObj) {
+  const data = {
+    quizId: quizObj.quizId || `QZ-${Date.now().toString().slice(-3)}`,
+    title: quizObj.title,
+    subject: quizObj.subject || 'Advanced Physics',
+    classId: quizObj.classId || '10-A',
+    dueDate: quizObj.dueDate || '2026-08-15',
+    duration: quizObj.duration || '30 mins',
+    createdBy: quizObj.createdBy || 'Teacher',
+    questionsJson: JSON.stringify(quizObj.questions || [])
+  };
+  return await callSheetsApi('addQuiz', { data });
+}
+
+export async function recordAttendanceToSheets(attendanceObj) {
+  const data = {
+    attendanceId: `ATT-${Date.now()}`,
+    studentId: attendanceObj.studentId || 'STU-1001',
+    studentName: attendanceObj.studentName || 'Alex Rivera',
+    classId: attendanceObj.classId || '10-A',
+    date: new Date().toLocaleDateString('id-ID'),
+    time: new Date().toLocaleTimeString('id-ID'),
+    status: attendanceObj.status || 'Present',
+    location: attendanceObj.location || 'Smart Gate QR',
+    notes: attendanceObj.notes || 'Automated Sync'
+  };
+  return await callSheetsApi('addAttendance', { data });
+}
+
+export async function recordAiLogToSheets(aiLogObj) {
+  const data = {
+    logId: `LOG-${Date.now()}`,
+    userRole: aiLogObj.userRole || 'Student',
+    toolName: aiLogObj.toolName || 'AI Quiz Generator',
+    prompt: aiLogObj.prompt || '',
+    responseSummary: aiLogObj.responseSummary || 'Generated Successfully',
+    timestamp: new Date().toLocaleString('id-ID')
+  };
+  return await callSheetsApi('addAiLog', { data });
 }
 
 export async function addLibraryBookToSheets(bookObj) {
