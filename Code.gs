@@ -14,11 +14,13 @@ function setupDatabase() {
     'Students': ['studentId', 'name', 'gender', 'entryYear', 'studentNumber', 'password', 'classId', 'email', 'phone', 'parentName', 'parentPhone', 'status'],
     'Teachers': ['teacherId', 'name', 'gender', 'entryYear', 'teacherNumber', 'password', 'email', 'phone', 'status', 'subject'],
     'Classes': ['classId', 'className', 'gradeLevel', 'homeroomTeacher', 'capacity'],
+    'Subjects': ['subjectId', 'subjectName', 'category', 'teacherName', 'weeklyHours'],
     'Attendance': ['attendanceId', 'studentId', 'studentName', 'classId', 'date', 'time', 'status', 'location', 'notes'],
     'Library': ['id', 'title', 'author', 'category', 'readUrl', 'description'],
     'Extracurriculars': ['id', 'name', 'supervisor', 'scheduleDay', 'location', 'membersCount'],
     'Announcements': ['id', 'scope', 'targetClassId', 'title', 'content', 'date', 'priority', 'createdBy'],
     'Quizzes': ['quizId', 'title', 'subject', 'classId', 'dueDate', 'duration', 'createdBy', 'questionsJson'],
+    'QuizResults': ['resultId', 'quizId', 'studentId', 'studentName', 'score', 'correctCount', 'wrongCount', 'submittedAt'],
     'Finance': ['invoiceId', 'studentId', 'studentName', 'amount', 'paymentType', 'status', 'date'],
     'AiLogs': ['logId', 'userRole', 'toolName', 'prompt', 'responseSummary', 'timestamp']
   };
@@ -31,7 +33,7 @@ function setupDatabase() {
   
   return { 
     success: true, 
-    message: 'Database setup complete!', 
+    message: 'Database & Announcements setup complete!', 
     spreadsheetName: ss.getName(),
     spreadsheetUrl: ss.getUrl() 
   };
@@ -56,19 +58,24 @@ function createSheetIfNotExists(ss, name, headers) {
 function addSampleDataIfEmpty(ss) {
   const studentsSheet = ss.getSheetByName('Students');
   if (studentsSheet && studentsSheet.getLastRow() <= 1) {
-    studentsSheet.appendRow(['STU-1001', 'Alex Rivera', 'Laki-laki', 2026, '24001', 'password123', '10-A', 'alex@smartschool.edu', '08123456789', 'Robert Rivera', '08129876001', 'Active']);
-    studentsSheet.appendRow(['STU-1002', 'Sarah Chen', 'Perempuan', 2026, '24002', 'password123', '10-A', 'sarah.c@smartschool.edu', '08123456790', 'David Chen', '08129876002', 'Active']);
+    studentsSheet.appendRow(['STU-1001', 'Alex Rivera', 'Laki-laki', 2026, '24001', 'password123', '10-A', 'alex@smartschool.edu', '0812-3456-7890', 'Robert Rivera', '0812-9876-0001', 'Active']);
+    studentsSheet.appendRow(['STU-1002', 'Sarah Chen', 'Perempuan', 2026, '24002', 'password123', '10-A', 'sarah.c@smartschool.edu', '0812-3456-7891', 'David Chen', '0812-9876-0002', 'Active']);
   }
   
   const teachersSheet = ss.getSheetByName('Teachers');
   if (teachersSheet && teachersSheet.getLastRow() <= 1) {
-    teachersSheet.appendRow(['TCH-001', 'Dr. Evelyn Reed', 'Perempuan', 2022, 'T2001', 'teacher123', 'evelyn@smartschool.edu', '08129876543', 'Active', 'Advanced Physics & Quantum Science']);
-    teachersSheet.appendRow(['TCH-002', 'Prof. Marcus Vance', 'Laki-laki', 2021, 'T2002', 'teacher123', 'marcus@smartschool.edu', '08129876544', 'Active', 'Computer Science & AI Algorithms']);
+    teachersSheet.appendRow(['TCH-001', 'Dr. Evelyn Reed', 'Perempuan', 2022, 'T2001', 'teacher123', 'evelyn@smartschool.edu', '0812-9876-5431', 'Active', 'Advanced Physics']);
+    teachersSheet.appendRow(['TCH-002', 'Prof. Marcus Vance', 'Laki-laki', 2021, 'T2002', 'teacher123', 'marcus@smartschool.edu', '0812-9876-5432', 'Active', 'Computer Science & AI']);
   }
 
-  const librarySheet = ss.getSheetByName('Library');
-  if (librarySheet && librarySheet.getLastRow() <= 1) {
-    librarySheet.appendRow(['LIB-001', 'Quantum Computing 2026', 'Dr. Evelyn Reed', 'Science & AI', 'https://arxiv.org', 'Guide on quantum neural networks.']);
+  const annSheet = ss.getSheetByName('Announcements');
+  if (annSheet && annSheet.getLastRow() <= 1) {
+    annSheet.appendRow(['ANN-001', 'General', 'All', 'Pengumuman Pelaksanaan Ujian CBT Semester Genap 2026', 'Seluruh siswa diharapkan mempersiapkan akun portal.', new Date().toLocaleDateString('id-ID'), 'Urgent', 'Headmaster Office']);
+  }
+
+  const quizSheet = ss.getSheetByName('Quizzes');
+  if (quizSheet && quizSheet.getLastRow() <= 1) {
+    quizSheet.appendRow(['QZ-001', 'Ujian Fisika Kuantum & AI', 'Advanced Physics', '10-A', '2026-08-10', '15 mins', 'Dr. Evelyn Reed', '[]']);
   }
 }
 
@@ -116,6 +123,10 @@ function handleApiRequest(e) {
         result = { success: true, data: readRows(ss, 'Teachers') };
         break;
 
+      case 'getSubjects':
+        result = { success: true, data: readRows(ss, 'Subjects') };
+        break;
+
       case 'getAttendance':
         result = { success: true, data: readRows(ss, 'Attendance') };
         break;
@@ -128,12 +139,20 @@ function handleApiRequest(e) {
         result = { success: true, data: readRows(ss, 'Announcements') };
         break;
 
+      case 'getQuizzes':
+        result = { success: true, data: readRows(ss, 'Quizzes') };
+        break;
+
       case 'addStudent':
         result = appendRow(ss, 'Students', payload.data || payload);
         break;
 
       case 'addTeacher':
         result = appendRow(ss, 'Teachers', payload.data || payload);
+        break;
+
+      case 'addSubject':
+        result = appendRow(ss, 'Subjects', payload.data || payload);
         break;
 
       case 'addAttendance':
@@ -146,6 +165,10 @@ function handleApiRequest(e) {
 
       case 'addAnnouncement':
         result = appendRow(ss, 'Announcements', payload.data || payload);
+        break;
+
+      case 'addQuiz':
+        result = appendRow(ss, 'Quizzes', payload.data || payload);
         break;
 
       case 'addAiLog':
